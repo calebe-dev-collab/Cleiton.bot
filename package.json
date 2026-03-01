@@ -1,19 +1,12 @@
 {
-  "name": "cleiton-hot",
+  "name": "bot-discord",
   "version": "1.0.0",
-  "description": "Bot Discord Cleiton com moderação automática",
+  "description": "Bot de moderação",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.15.0",
-    "express": "^4.18.2",
-    "dotenv": "^16.3.1"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "author": "Calebe",
-  "license": "MIT"
+    "discord.js": "^14.0.0"
+  }
 }
