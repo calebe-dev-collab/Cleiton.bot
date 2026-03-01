@@ -1,14 +1,13 @@
 {
   "name": "cleiton-hot",
   "version": "1.0.0",
-  "description": "Bot Discord Cleiton com moderação e IA Hugging Face",
+  "description": "Bot Discord Cleiton com moderação automática",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.15.0",
-    "node-fetch": "^2.6.7",
     "express": "^4.18.2",
     "dotenv": "^16.3.1"
   },
