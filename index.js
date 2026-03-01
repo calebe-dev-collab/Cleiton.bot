@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 require('dotenv').config();
 
 const TOKEN = process.env.DISCORD;
@@ -14,11 +14,10 @@ const client = new Client({
     ]
 });
 
-// Configuração OpenAI
-const configuration = new Configuration({
+// Configuração OpenAI (CommonJS)
+const openai = new OpenAI({
     apiKey: OPENAI_KEY
 });
-const openai = new OpenAIApi(configuration);
 
 // Moderação
 const spamMap = new Map();
@@ -33,7 +32,6 @@ client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
     const member = message.member;
-
     if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
     if (member.roles.cache.size > 1) return; // Apenas membros sem cargo
 
@@ -44,18 +42,13 @@ client.on("messageCreate", async (message) => {
     let tempo = 0;
     let apagarSpam = false;
 
-    // Detecta links
     if (linkRegex.test(content)) {
         motivo = "Envio de link";
         tempo = 15;
-    }
-    // Mensagem longa
-    else if (content.length >= 300) {
+    } else if (content.length >= 300) {
         motivo = "Mensagem muito longa";
         tempo = 3;
-    }
-    // Excesso de emojis
-    else {
+    } else {
         const emojiCount = (content.match(/[\u{1F600}-\u{1F64F}]/gu) || []).length;
         if (emojiCount > 10) {
             motivo = "Excesso de emojis";
@@ -63,7 +56,6 @@ client.on("messageCreate", async (message) => {
         }
     }
 
-    // Spam de caracteres repetidos
     if (!motivo && /(.)\1{8,}/.test(content)) {
         motivo = "Spam de caracteres";
         tempo = 4;
@@ -104,21 +96,21 @@ client.on("messageCreate", async (message) => {
         if (!promptUser) return;
 
         const prompt = `
-Você é uma barata que atua como juiz no Discord, mas seu nome de bot é Cleiton. 
-Você é rigoroso, justo, irônico e engraçado. 
-Você lê a mensagem do usuário e decide se infringe regras (spam, links, emojis demais, mensagens longas). 
-Se for infração, diga o motivo e como Cleiton aplicaria a punição. 
+Você é uma barata que atua como juiz no Discord, mas seu nome de bot é Cleiton.
+Você é rigorosa, justa, irônica e engraçada.
+Você lê a mensagem do usuário e decide se infringe regras (spam, links, emojis demais, mensagens longas).
+Se for infração, diga o motivo e como Cleiton aplicaria a punição.
 Se não for infração, apenas converse normalmente, mantendo a personalidade de barata juíza.
 Mensagem do usuário: "${promptUser}"
 `;
 
         try {
-            const response = await openai.createChatCompletion({
+            const response = await openai.chat.completions.create({
                 model: "gpt-3.5-turbo",
                 messages: [{ role: "user", content: prompt }]
             });
 
-            const reply = response.data.choices[0].message.content;
+            const reply = response.choices[0].message.content;
             message.reply(reply);
         } catch (err) {
             console.error(err);
@@ -159,7 +151,7 @@ async function punir(member, message, motivo, minutos, apagarSpam = false) {
     }, 5000);
 }
 
-// Servidor web mínimo (opcional)
+// Servidor web mínimo (para Railway/Replit)
 const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('Bot Cleiton online!'));
