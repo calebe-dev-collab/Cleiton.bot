@@ -1,10 +1,9 @@
-const { 
-    Client, 
-    GatewayIntentBits, 
-    PermissionsBitField 
-} = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { Configuration, OpenAIApi } = require('openai');
+require('dotenv').config();
 
 const TOKEN = process.env.DISCORD;
+const OPENAI_KEY = process.env.OPENAI;
 
 const client = new Client({
     intents: [
@@ -15,11 +14,18 @@ const client = new Client({
     ]
 });
 
+// Configuração OpenAI
+const configuration = new Configuration({
+    apiKey: OPENAI_KEY
+});
+const openai = new OpenAIApi(configuration);
+
+// Moderação
 const spamMap = new Map();
 const linkRegex = /(https?:\/\/|www\.|discord\.gg|\.com|\.net|\.gg|\.org)/i;
 
 client.once("clientReady", () => {
-    console.log(`Bot online como ${client.user.tag}`);
+    console.log(`Bot Cleiton online!`);
 });
 
 client.on("messageCreate", async (message) => {
@@ -29,7 +35,7 @@ client.on("messageCreate", async (message) => {
     const member = message.member;
 
     if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-    if (member.roles.cache.size > 1) return;
+    if (member.roles.cache.size > 1) return; // Apenas membros sem cargo
 
     const content = message.content;
     const userId = message.author.id;
@@ -38,16 +44,17 @@ client.on("messageCreate", async (message) => {
     let tempo = 0;
     let apagarSpam = false;
 
+    // Detecta links
     if (linkRegex.test(content)) {
         motivo = "Envio de link";
         tempo = 15;
     }
-
+    // Mensagem longa
     else if (content.length >= 300) {
         motivo = "Mensagem muito longa";
         tempo = 3;
     }
-
+    // Excesso de emojis
     else {
         const emojiCount = (content.match(/[\u{1F600}-\u{1F64F}]/gu) || []).length;
         if (emojiCount > 10) {
@@ -56,12 +63,13 @@ client.on("messageCreate", async (message) => {
         }
     }
 
+    // Spam de caracteres repetidos
     if (!motivo && /(.)\1{8,}/.test(content)) {
         motivo = "Spam de caracteres";
         tempo = 4;
     }
 
-    // SPAM REAL (3 mensagens em 5 segundos)
+    // Spam real (3 mensagens em 5 segundos)
     if (!motivo) {
         if (!spamMap.has(userId)) {
             spamMap.set(userId, { count: 1, lastMessage: Date.now() });
@@ -89,6 +97,34 @@ client.on("messageCreate", async (message) => {
     if (motivo) {
         await punir(member, message, motivo, tempo, apagarSpam);
     }
+
+    // Responder menções com IA – personalidade de barata juíza
+    if (message.mentions.has(client.user)) {
+        const promptUser = message.content.replace(/<@!?(\d+)>/, '').trim();
+        if (!promptUser) return;
+
+        const prompt = `
+Você é uma barata que atua como juiz no Discord, mas seu nome de bot é Cleiton. 
+Você é rigoroso, justo, irônico e engraçado. 
+Você lê a mensagem do usuário e decide se infringe regras (spam, links, emojis demais, mensagens longas). 
+Se for infração, diga o motivo e como Cleiton aplicaria a punição. 
+Se não for infração, apenas converse normalmente, mantendo a personalidade de barata juíza.
+Mensagem do usuário: "${promptUser}"
+`;
+
+        try {
+            const response = await openai.createChatCompletion({
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: prompt }]
+            });
+
+            const reply = response.data.choices[0].message.content;
+            message.reply(reply);
+        } catch (err) {
+            console.error(err);
+            message.reply("Ops, Cleiton está confuso 😅");
+        }
+    }
 });
 
 async function punir(member, message, motivo, minutos, apagarSpam = false) {
@@ -99,11 +135,7 @@ async function punir(member, message, motivo, minutos, apagarSpam = false) {
     try {
         if (apagarSpam) {
             const messages = await message.channel.messages.fetch({ limit: 10 });
-
-            const userMessages = messages.filter(
-                msg => msg.author.id === member.id
-            );
-
+            const userMessages = messages.filter(msg => msg.author.id === member.id);
             await message.channel.bulkDelete(userMessages, true);
         } else {
             await message.delete();
@@ -126,5 +158,11 @@ async function punir(member, message, motivo, minutos, apagarSpam = false) {
         aviso.delete().catch(() => {});
     }, 5000);
 }
+
+// Servidor web mínimo (opcional)
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('Bot Cleiton online!'));
+app.listen(3000, () => console.log('Servidor rodando na porta 3000'));
 
 client.login(TOKEN);
