@@ -14,10 +14,8 @@ const client = new Client({
   ]
 });
 
-// Configuração OpenAI
-const openai = new OpenAI({
-  apiKey: OPENAI_KEY
-});
+// OpenAI
+const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
 // Moderação
 const spamMap = new Map();
@@ -28,12 +26,11 @@ client.once("clientReady", () => {
 });
 
 client.on("messageCreate", async (message) => {
-  if (!message.guild) return;
-  if (message.author.bot) return;
+  if (!message.guild || message.author.bot) return;
 
   const member = message.member;
 
-  // MODERAÇÃO: apenas membros sem cargo
+  // MODERAÇÃO: apenas membros sem cargo e não admins
   if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && member.roles.cache.size === 0) {
     const content = message.content;
     const userId = message.author.id;
@@ -91,8 +88,8 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // RESPOSTA IA: qualquer membro com cargo ou sem cargo
-  if (message.mentions.has(client.user.id)) {
+  // RESPOSTA IA: membros com cargo ou sem cargo
+  if (message.mentions.users.has(client.user.id)) {
     const promptUser = message.content.replace(/<@!?(\d+)>/, '').trim();
     if (!promptUser) return;
 
@@ -120,7 +117,6 @@ Mensagem do usuário: "${promptUser}"
   }
 });
 
-// FUNÇÃO DE PUNIÇÃO
 async function punir(member, message, motivo, minutos, apagarSpam = false) {
   if (member.communicationDisabledUntilTimestamp > Date.now()) return;
 
@@ -153,7 +149,7 @@ async function punir(member, message, motivo, minutos, apagarSpam = false) {
   }, 5000);
 }
 
-// Servidor web mínimo (Railway/Render)
+// Servidor web mínimo
 const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('Bot Cleiton online!'));
