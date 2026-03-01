@@ -1,9 +1,9 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
-const OpenAI = require('openai');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 const TOKEN = process.env.DISCORD;
-const OPENAI_KEY = process.env.OPENAI;
+const HUGGING_KEY = process.env.HUGGING_FACE_API_KEY;
 
 const client = new Client({
   intents: [
@@ -14,15 +14,12 @@ const client = new Client({
   ]
 });
 
-// OpenAI
-const openai = new OpenAI({ apiKey: OPENAI_KEY });
-
-// Moderação
+// MODERAÇÃO
 const spamMap = new Map();
 const linkRegex = /(https?:\/\/|www\.|discord\.gg|\.com|\.net|\.gg|\.org)/i;
 
 client.once("clientReady", () => {
-  console.log(`Bot Cleiton online!`);
+  console.log(`Cleiton online!`);
 });
 
 client.on("messageCreate", async (message) => {
@@ -30,7 +27,7 @@ client.on("messageCreate", async (message) => {
 
   const member = message.member;
 
-  // MODERAÇÃO: apenas membros sem cargo e não admins
+  // ---------- MODERAÇÃO: apenas membros sem cargo ----------
   if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && member.roles.cache.size === 0) {
     const content = message.content;
     const userId = message.author.id;
@@ -88,35 +85,51 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // RESPOSTA IA: membros com cargo ou sem cargo
+  // ---------- RESPOSTA DO CLEITON (IA Hugging Face) ----------
   if (message.mentions.users.has(client.user.id)) {
-    const promptUser = message.content.replace(/<@!?(\d+)>/, '').trim();
-    if (!promptUser) return;
+    const textoUsuario = message.content.replace(/<@!?(\d+)>/, '').trim();
+    if (!textoUsuario) return;
 
-    const prompt = `
-Você é uma barata que atua como juiz no Discord, mas seu nome de bot é Cleiton.
-Você é rigorosa, justa, irônica e engraçada.
-Você lê a mensagem do usuário e decide se infringe regras (spam, links, emojis demais, mensagens longas).
-Se for infração, diga o motivo e como Cleiton aplicaria a punição.
-Se não for infração, apenas converse normalmente, mantendo a personalidade de barata juíza.
-Mensagem do usuário: "${promptUser}"
-`;
+    const prompt = `Você é uma barata juíza chamada Cleiton no Discord. Responda de forma curta, irônica e engraçada à seguinte mensagem: "${textoUsuario}"`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7
-      });
-
-      const reply = response.choices[0].message.content;
+      const reply = await gerarRespostaHugging(prompt);
       message.reply(reply);
     } catch (err) {
-      console.error("Erro OpenAI:", err);
+      console.error("Erro IA Hugging:", err);
+      message.reply("🤖 Cleiton está confuso... 🪳");
     }
   }
 });
 
+// ---------- FUNÇÃO PARA GERAR RESPOSTA HUGGING FACE ----------
+async function gerarRespostaHugging(prompt) {
+  const model = "gpt2-large"; // modelo leve, respostas curtas
+  const url = `https://api-inference.huggingface.co/models/${model}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${HUGGING_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      inputs: prompt,
+      parameters: {
+        max_new_tokens: 30, // respostas curtas
+        temperature: 0.7,
+        repetition_penalty: 1.2
+      }
+    })
+  });
+
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+
+  return Array.isArray(data) ? data[0].generated_text : data.generated_text;
+}
+
+// ---------- FUNÇÃO DE PUNIÇÃO ----------
 async function punir(member, message, motivo, minutos, apagarSpam = false) {
   if (member.communicationDisabledUntilTimestamp > Date.now()) return;
 
@@ -149,10 +162,10 @@ async function punir(member, message, motivo, minutos, apagarSpam = false) {
   }, 5000);
 }
 
-// Servidor web mínimo
+// ---------- SERVIDOR WEB PARA 24H ----------
 const express = require('express');
 const app = express();
-app.get('/', (req, res) => res.send('Bot Cleiton online!'));
+app.get('/', (req, res) => res.send('Cleiton online!'));
 app.listen(3000, () => console.log('Servidor rodando na porta 3000'));
 
 client.login(TOKEN);
