@@ -1,9 +1,7 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
-const fetch = require('node-fetch');
 require('dotenv').config();
 
 const TOKEN = process.env.DISCORD;
-const HUGGING_KEY = process.env.HUGGING_FACE_API_KEY;
 
 const client = new Client({
   intents: [
@@ -14,7 +12,6 @@ const client = new Client({
   ]
 });
 
-// MODERAÇÃO
 const spamMap = new Map();
 const linkRegex = /(https?:\/\/|www\.|discord\.gg|\.com|\.net|\.gg|\.org)/i;
 
@@ -27,7 +24,7 @@ client.on("messageCreate", async (message) => {
 
   const member = message.member;
 
-  // ---------- MODERAÇÃO: apenas membros sem cargo ----------
+  // Moderação apenas para membros sem cargo
   if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && member.roles.cache.size === 0) {
     const content = message.content;
     const userId = message.author.id;
@@ -84,52 +81,8 @@ client.on("messageCreate", async (message) => {
       await punir(member, message, motivo, tempo, apagarSpam);
     }
   }
-
-  // ---------- RESPOSTA DO CLEITON (IA Hugging Face) ----------
-  if (message.mentions.users.has(client.user.id)) {
-    const textoUsuario = message.content.replace(/<@!?(\d+)>/, '').trim();
-    if (!textoUsuario) return;
-
-    const prompt = `Você é uma barata juíza chamada Cleiton no Discord. Responda de forma curta, irônica e engraçada à seguinte mensagem: "${textoUsuario}"`;
-
-    try {
-      const reply = await gerarRespostaHugging(prompt);
-      message.reply(reply);
-    } catch (err) {
-      console.error("Erro IA Hugging:", err);
-      message.reply("🤖 Cleiton está confuso... 🪳");
-    }
-  }
 });
 
-// ---------- FUNÇÃO PARA GERAR RESPOSTA HUGGING FACE ----------
-async function gerarRespostaHugging(prompt) {
-  const model = "gpt2-large"; // modelo leve, respostas curtas
-  const url = `https://api-inference.huggingface.co/models/${model}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${HUGGING_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      inputs: prompt,
-      parameters: {
-        max_new_tokens: 30, // respostas curtas
-        temperature: 0.7,
-        repetition_penalty: 1.2
-      }
-    })
-  });
-
-  const data = await response.json();
-  if (data.error) throw new Error(data.error);
-
-  return Array.isArray(data) ? data[0].generated_text : data.generated_text;
-}
-
-// ---------- FUNÇÃO DE PUNIÇÃO ----------
 async function punir(member, message, motivo, minutos, apagarSpam = false) {
   if (member.communicationDisabledUntilTimestamp > Date.now()) return;
 
@@ -162,7 +115,7 @@ async function punir(member, message, motivo, minutos, apagarSpam = false) {
   }, 5000);
 }
 
-// ---------- SERVIDOR WEB PARA 24H ----------
+// Servidor simples para manter online em Railway/Render
 const express = require('express');
 const app = express();
 app.get('/', (req, res) => res.send('Cleiton online!'));
