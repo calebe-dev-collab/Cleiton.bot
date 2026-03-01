@@ -14,7 +14,7 @@ const client = new Client({
   ]
 });
 
-// Configuração OpenAI (CommonJS v4+)
+// Configuração OpenAI
 const openai = new OpenAI({
   apiKey: OPENAI_KEY
 });
@@ -33,76 +33,70 @@ client.on("messageCreate", async (message) => {
 
   const member = message.member;
 
-  // Somente membros com cargo ou sem cargo podem interagir com Cleiton
-  if (member.roles.cache.size === 0 && !member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    return; // Não faz nada se não tiver cargo
-  }
+  // MODERAÇÃO: apenas membros sem cargo
+  if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && member.roles.cache.size === 0) {
+    const content = message.content;
+    const userId = message.author.id;
 
-  const content = message.content;
-  const userId = message.author.id;
+    let motivo = null;
+    let tempo = 0;
+    let apagarSpam = false;
 
-  let motivo = null;
-  let tempo = 0;
-  let apagarSpam = false;
-
-  // Detecta links
-  if (linkRegex.test(content)) {
-    motivo = "Envio de link";
-    tempo = 15;
-  } else if (content.length >= 300) {
-    motivo = "Mensagem muito longa";
-    tempo = 3;
-  } else {
-    const emojiCount = (content.match(/[\u{1F600}-\u{1F64F}]/gu) || []).length;
-    if (emojiCount > 10) {
-      motivo = "Excesso de emojis";
-      tempo = 2;
-    }
-  }
-
-  // Spam de caracteres repetidos
-  if (!motivo && /(.)\1{8,}/.test(content)) {
-    motivo = "Spam de caracteres";
-    tempo = 4;
-  }
-
-  // Spam real (3 mensagens em 5 segundos)
-  if (!motivo) {
-    if (!spamMap.has(userId)) {
-      spamMap.set(userId, { count: 1, lastMessage: Date.now() });
+    if (linkRegex.test(content)) {
+      motivo = "Envio de link";
+      tempo = 15;
+    } else if (content.length >= 300) {
+      motivo = "Mensagem muito longa";
+      tempo = 3;
     } else {
-      const data = spamMap.get(userId);
-      const now = Date.now();
-
-      if (now - data.lastMessage < 5000) {
-        data.count++;
-        if (data.count >= 3) {
-          motivo = "Spam detectado";
-          tempo = 5;
-          apagarSpam = true;
-          data.count = 0;
-        }
-      } else {
-        data.count = 1;
+      const emojiCount = (content.match(/[\u{1F600}-\u{1F64F}]/gu) || []).length;
+      if (emojiCount > 10) {
+        motivo = "Excesso de emojis";
+        tempo = 2;
       }
+    }
 
-      data.lastMessage = now;
-      spamMap.set(userId, data);
+    if (!motivo && /(.)\1{8,}/.test(content)) {
+      motivo = "Spam de caracteres";
+      tempo = 4;
+    }
+
+    // Spam real (3 mensagens em 5 segundos)
+    if (!motivo) {
+      if (!spamMap.has(userId)) {
+        spamMap.set(userId, { count: 1, lastMessage: Date.now() });
+      } else {
+        const data = spamMap.get(userId);
+        const now = Date.now();
+
+        if (now - data.lastMessage < 5000) {
+          data.count++;
+          if (data.count >= 3) {
+            motivo = "Spam detectado";
+            tempo = 5;
+            apagarSpam = true;
+            data.count = 0;
+          }
+        } else {
+          data.count = 1;
+        }
+
+        data.lastMessage = now;
+        spamMap.set(userId, data);
+      }
+    }
+
+    if (motivo) {
+      await punir(member, message, motivo, tempo, apagarSpam);
     }
   }
 
-  if (motivo) {
-    await punir(member, message, motivo, tempo, apagarSpam);
-  }
+  // RESPOSTA IA: qualquer membro com cargo ou sem cargo
+  if (message.mentions.has(client.user.id)) {
+    const promptUser = message.content.replace(/<@!?(\d+)>/, '').trim();
+    if (!promptUser) return;
 
-  // Responder menções com IA (barata juíza)
-  if (message.mentions.has(client.user)) {
-    // Apenas se o membro tem cargo ou não tem cargo
-    if (member.roles.cache.size === 0 || member.roles.cache.size > 0) {
-      const promptUser = message.content.replace(/<@!?(\d+)>/, '').trim();
-      if (!promptUser) return;
-
-      const prompt = `
+    const prompt = `
 Você é uma barata que atua como juiz no Discord, mas seu nome de bot é Cleiton.
 Você é rigorosa, justa, irônica e engraçada.
 Você lê a mensagem do usuário e decide se infringe regras (spam, links, emojis demais, mensagens longas).
@@ -111,22 +105,22 @@ Se não for infração, apenas converse normalmente, mantendo a personalidade de
 Mensagem do usuário: "${promptUser}"
 `;
 
-      try {
-        const response = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.7
-        });
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7
+      });
 
-        const reply = response.choices[0].message.content;
-        message.reply(reply);
-      } catch (err) {
-        console.error("Erro OpenAI:", err);
-      }
+      const reply = response.choices[0].message.content;
+      message.reply(reply);
+    } catch (err) {
+      console.error("Erro OpenAI:", err);
     }
   }
 });
 
+// FUNÇÃO DE PUNIÇÃO
 async function punir(member, message, motivo, minutos, apagarSpam = false) {
   if (member.communicationDisabledUntilTimestamp > Date.now()) return;
 
